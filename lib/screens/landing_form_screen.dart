@@ -102,37 +102,58 @@ class _LandingFormScreenState extends ConsumerState<LandingFormScreen> {
     });
   }
 
+  // ... dentro de _LandingFormScreenState ...
+
   Future<void> _saveLanding() async {
+    // 1. Validação Básica: Tem que ter pelo menos um item
     if (_catches.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Adicione pelo menos uma espécie/peixe.')));
+          content: Text('Adicione pelo menos uma espécie/peixe.'),
+          backgroundColor: Colors.red));
       return;
+    }
+
+    // 2. VALIDAÇÃO DETALHADA (NOVO)
+    // Verifica item por item se Espécie e Quantidade foram preenchidos
+    for (int i = 0; i < _catches.length; i++) {
+      final fish = _catches[i];
+
+      // Verifica se a espécie está vazia ou nula
+      bool hasSpecies =
+          fish.speciesName != null && fish.speciesName!.trim().isNotEmpty;
+
+      // Verifica se a quantidade é válida (não nula e maior que zero)
+      bool hasQty = fish.quantity != null && fish.quantity! > 0;
+
+      if (!hasSpecies || !hasQty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Erro no item #${i + 1}: Preencha a Espécie e a Quantidade!'),
+            backgroundColor: Colors.red));
+        return; // PARA TUDO! Não salva nada.
+      }
     }
 
     setState(() => _isSaving = true);
 
     try {
       final fisherman = _fishermanController.text.trim().isEmpty
-          ? 'Pescador Não Identificado'
+          ? null // Manda null para ativar a lógica de "Campo Vazio" no IsarService
           : _fishermanController.text.trim();
+
       final boat = _boatController.text.trim().isEmpty
-          ? 'Barco Não Identificado'
+          ? null
           : _boatController.text.trim();
+
       final community = _communityController.text.trim().isEmpty
-          ? 'Comunidade Não Inf.'
+          ? null
           : _communityController.text.trim();
 
       final newLanding = Landing()
-        // --- SEGREDO DA EDIÇÃO ---
-        // Se tiver ID (edição), mantém. Se não, Isar.autoIncrement (novo).
         ..id = widget.landingToEdit?.id ?? Isar.autoIncrement
-        // Mantém o UUID original se for edição
         ..uuid = widget.landingToEdit?.uuid ?? const Uuid().v4()
-
-        // Mantém a data original se for edição, ou usa agora se for novo
         ..date = widget.landingToEdit?.date ?? DateTime.now()
-        ..isSynced =
-            false // Ao editar, sempre volta a ser "Não Sincronizado" (pendente)
+        ..isSynced = false
         ..landingPoint =
             widget.landingToEdit?.landingPoint ?? widget.initialLandingPoint
         ..fishermanName = fisherman
@@ -147,12 +168,15 @@ class _LandingFormScreenState extends ConsumerState<LandingFormScreen> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Registro salvo com sucesso! 💾')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Registro salvo com sucesso! 💾'),
+            backgroundColor: Colors.green));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Erro: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

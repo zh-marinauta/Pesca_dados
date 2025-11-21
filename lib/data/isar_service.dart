@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import 'package:marinuata_app/data/landing_model.dart';
 import 'package:marinuata_app/data/reference_models.dart';
 import 'package:marinuata_app/data/initial_data.dart';
@@ -23,16 +24,18 @@ class IsarService {
 
       if (await isar.species.count() == 0) {
         await isar.writeTxn(() async {
-          for (var name in InitialData.species)
+          for (var name in InitialData.species) {
             await isar.species.put(Species()
               ..name = name
               ..defaultUnit = 'kg');
+          }
         });
       }
       if (await isar.fishingGears.count() == 0) {
         await isar.writeTxn(() async {
-          for (var name in InitialData.fishingGears)
+          for (var name in InitialData.fishingGears) {
             await isar.fishingGears.put(FishingGear()..name = name);
+          }
         });
       }
       return isar;
@@ -40,64 +43,90 @@ class IsarService {
     return Future.value(Isar.getInstance());
   }
 
-  // --- SALVAR COM INTELIGÊNCIA E FAXINA ---
+  // --- 1. SALVAR COM INTELIGÊNCIA REFINADA (V1.2) ---
   Future<void> saveLandingWithLearning(Landing landing) async {
     final isar = await db;
 
     await isar.writeTxn(() async {
-      // 1. Salva a Coleta
+      // A. Salva a Coleta
       await isar.landings.put(landing);
 
-      // 2. Aprende Unidade Produtiva (Lógica de Inserção/Atualização)
-      final pName = landing.fishermanName ?? '';
-      final bName = landing.boatName ?? '';
-      bool isUnidentified = pName.trim().isEmpty ||
-          pName.contains('Não Identificado') ||
-          bName.trim().isEmpty ||
-          bName.contains('Não Identificado');
+      // B. INTELIGÊNCIA DE UNIDADE PRODUTIVA
+      final pName = landing.fishermanName?.trim();
+      final bName = landing.boatName?.trim();
+      final comm = landing.community?.trim();
 
-      // Regra: Se tiver pelo menos um nome válido, aprende
-      bool isValidToLearn =
-          (!pName.contains('Não Identificado') && pName.isNotEmpty) ||
-              (!bName.contains('Não Identificado') && bName.isNotEmpty);
+      if ((pName != null && pName.isNotEmpty) ||
+          (bName != null && bName.isNotEmpty)) {
+        ProductiveUnit? targetUnit;
 
-      if (isValidToLearn) {
-        final coreKey = [
-          landing.fishermanName,
-          landing.boatName,
-          landing.community
-        ].where((s) => s != null && s.trim().isNotEmpty).join(' - ');
+        final candidates = await isar.productiveUnits
+            .filter()
+            .group((q) => q
+                .fishermanNameEqualTo(pName ?? '', caseSensitive: false)
+                .or()
+                .boatNameEqualTo(bName ?? '', caseSensitive: false))
+            .findAll();
 
-        if (coreKey.isNotEmpty) {
-          final existingUnit = await isar.productiveUnits
-              .filter()
-              .searchKeyStartsWith(coreKey, caseSensitive: false)
-              .findFirst();
+        // Nível A: MATCH EXATO
+        try {
+          targetUnit = candidates.firstWhere((u) {
+            return _compare(u.fishermanName, pName) &&
+                _compare(u.boatName, bName) &&
+                _compare(u.community, comm);
+          });
+        } catch (e) {
+          targetUnit = null;
+        }
 
-          if (existingUnit == null) {
-            // Cria Novo
-            final newUnit = ProductiveUnit()
-              ..searchKey =
-                  '$coreKey - ${landing.category ?? ""} - ${landing.boatType ?? ""}'
-              ..fishermanName = landing.fishermanName
-              ..boatName = landing.boatName
-              ..community = landing.community
-              ..category = landing.category
-              ..boatType = landing.boatType;
-            await isar.productiveUnits.put(newUnit);
-          } else {
-            // Atualiza (Lógica simplificada: sempre atualiza o existente com os dados mais recentes daquele barco)
-            // Isso garante que a correção de typo no formulário reflita aqui
-            existingUnit.category = landing.category;
-            existingUnit.boatType = landing.boatType;
-            existingUnit.searchKey =
-                '$coreKey - ${landing.category ?? ""} - ${landing.boatType ?? ""}';
-            await isar.productiveUnits.put(existingUnit);
+        // Nível B: ENRIQUECIMENTO
+        if (targetUnit == null) {
+          for (var candidate in candidates) {
+            bool conflict = false;
+            if (_hasData(candidate.fishermanName) &&
+                _hasData(pName) &&
+                !_compare(candidate.fishermanName, pName)) conflict = true;
+            if (_hasData(candidate.boatName) &&
+                _hasData(bName) &&
+                !_compare(candidate.boatName, bName)) conflict = true;
+            if (_hasData(candidate.community) &&
+                _hasData(comm) &&
+                !_compare(candidate.community, comm)) conflict = true;
+
+            if (!conflict) {
+              targetUnit = candidate;
+              break;
+            }
           }
+        }
+
+        if (targetUnit == null) {
+          // NOVA UNIDADE
+          final newUnit = ProductiveUnit()
+            ..uuid = const Uuid().v4()
+            ..isSynced = false
+            ..searchKey = _generateSearchKey(landing)
+            ..fishermanName = pName
+            ..boatName = bName
+            ..community = comm
+            ..category = landing.category
+            ..boatType = landing.boatType;
+
+          await isar.productiveUnits.put(newUnit);
+        } else {
+          // ATUALIZAÇÃO
+          targetUnit.fishermanName = targetUnit.fishermanName ?? pName;
+          targetUnit.boatName = targetUnit.boatName ?? bName;
+          targetUnit.community = targetUnit.community ?? comm;
+          targetUnit.category = landing.category ?? targetUnit.category;
+          targetUnit.boatType = landing.boatType ?? targetUnit.boatType;
+          targetUnit.searchKey = _generateSearchKeyFromUnit(targetUnit);
+          targetUnit.isSynced = false;
+          await isar.productiveUnits.put(targetUnit);
         }
       }
 
-      // 3. Aprende Espécies
+      // C. Aprende Espécies e Artes
       for (var catchItem in landing.catches) {
         if (catchItem.speciesName != null &&
             catchItem.speciesName!.isNotEmpty) {
@@ -122,40 +151,14 @@ class IsarService {
         }
       }
 
-      // 4. FAXINA (Limpa unidades órfãs/erradas)
-      // Chamamos a função de limpeza dentro da transação para ser seguro
-      await _cleanOrphanUnits(isar);
+      // D. Faxina
+      //await _cleanOrphanUnits(isar);
     });
   }
 
-  // --- FUNÇÃO DE LIMPEZA (Privada) ---
-  Future<void> _cleanOrphanUnits(Isar isar) async {
-    // Busca todas as unidades produtivas cadastradas
-    final allUnits = await isar.productiveUnits.where().findAll();
-
-    for (var unit in allUnits) {
-      // Conta quantos desembarques existem com exatamente esses dados
-      final count = await isar.landings
-          .filter()
-          .fishermanNameEqualTo(unit.fishermanName)
-          .and()
-          .boatNameEqualTo(unit.boatName)
-          .and()
-          .communityEqualTo(unit.community)
-          .count();
-
-      // Se count for 0, significa que não tem nenhum desembarque usando esse nome.
-      // Logo, foi um typo corrigido ou deletado. Podemos apagar do autocomplete.
-      if (count == 0) {
-        print("🧹 Faxina: Removendo unidade órfã '${unit.searchKey}'");
-        await isar.productiveUnits.delete(unit.id);
-      }
-    }
-  }
-
-  // --- Getters ---
+  // --- 2. DASHBOARD METRICS (Agora com yearWeight declarado!) ---
   Future<Map<String, dynamic>> getDashboardMetrics() async {
-    if (kIsWeb)
+    if (kIsWeb) {
       return {
         'trips_month': 0,
         'weight_month': 0.0,
@@ -163,53 +166,62 @@ class IsarService {
         'units_month': 0,
         'pending_sync': 0
       };
+    }
 
     final isar = await db;
     final now = DateTime.now();
     final startOfMonth = DateTime(now.year, now.month, 1);
     final startOfYear = DateTime(now.year, 1, 1);
+
+    // Pendências
+    final pendingLandings =
+        await isar.landings.filter().isSyncedEqualTo(false).count();
+    final pendingUnits =
+        await isar.productiveUnits.filter().isSyncedEqualTo(false).count();
+    final totalPending = pendingLandings + pendingUnits;
+
+    // Dados do Ano
     final yearlyLandings =
         await isar.landings.filter().dateGreaterThan(startOfYear).findAll();
-    final pendingCount =
-        await isar.landings.filter().isSyncedEqualTo(false).count();
 
+    // Variáveis do Mês
     int monthTrips = 0;
     double monthWeight = 0;
     double monthDozen = 0;
-    final Set<String> monthActiveUnits = {};
 
-    int yearTrips = 0;
+    // Variáveis do Ano (ADICIONADO AGORA)
     double yearWeight = 0;
     double yearDozen = 0;
+
+    final Set<String> monthActiveUnits = {};
     final Set<String> yearActiveUnits = {};
 
     for (var landing in yearlyLandings) {
       double lWeight = 0;
       double lDozen = 0;
 
-      // Regra de validade para dashboard
-      final pName = landing.fishermanName ?? '';
-      final bName = landing.boatName ?? '';
-      bool isValidUnit =
-          (!pName.contains('Não Identificado') && pName.isNotEmpty) ||
-              (!bName.contains('Não Identificado') && bName.isNotEmpty);
+      final pName = landing.fishermanName?.trim() ?? '';
+      final bName = landing.boatName?.trim() ?? '';
+      final comm = landing.community?.trim() ?? '';
 
-      final String unitKey = '$pName - $bName';
+      bool isValidUnit = pName.isNotEmpty || bName.isNotEmpty;
+      final String unitKey = '$pName|$bName|$comm';
 
       for (var fish in landing.catches) {
         final unit = fish.unit?.toLowerCase() ?? '';
         final qty = fish.quantity ?? 0;
         if (unit == 'kg')
           lWeight += qty;
-        else if (unit == 'dz' || unit == 'duzia' || unit == 'dúzia')
-          lDozen += qty;
+        else if (['dz', 'duzia', 'dúzia'].contains(unit)) lDozen += qty;
       }
 
-      yearTrips++;
+      // Soma Totais do Ano (ADICIONADO AGORA)
       yearWeight += lWeight;
       yearDozen += lDozen;
+
       if (isValidUnit) yearActiveUnits.add(unitKey);
 
+      // Soma Totais do Mês
       if (landing.date.isAfter(startOfMonth) ||
           landing.date.isAtSameMomentAs(startOfMonth)) {
         monthTrips++;
@@ -220,20 +232,24 @@ class IsarService {
     }
 
     return {
-      'pending_sync': pendingCount,
+      'pending_sync': totalPending,
       'trips_month': monthTrips,
       'weight_month': monthWeight,
       'dozen_month': monthDozen,
       'units_month': monthActiveUnits.length,
-      'trips_year': yearTrips,
-      'weight_year': yearWeight,
-      'dozen_year': yearDozen,
+      'trips_year': yearlyLandings.length,
+      'weight_year': yearWeight, // Agora a variável existe!
+      'dozen_year': yearDozen, // Agora a variável existe!
       'units_year': yearActiveUnits.length,
     };
   }
 
+  // --- 3. BUSCAS E AUXILIARES ---
   Future<List<ProductiveUnit>> searchProductiveUnit(String query) async {
     final isar = await db;
+    if (query.isEmpty) {
+      return await isar.productiveUnits.where().limit(50).findAll();
+    }
     return await isar.productiveUnits
         .filter()
         .searchKeyContains(query, caseSensitive: false)
@@ -275,6 +291,7 @@ class IsarService {
 
   Future<void> saveLanding(Landing landing) async =>
       saveLandingWithLearning(landing);
+
   Future<List<Landing>> getAllLandings() async {
     final isar = await db;
     return await isar.landings.where().sortByDateDesc().findAll();
@@ -284,5 +301,51 @@ class IsarService {
     final isar = await db;
     final last = await isar.landings.where().sortByDateDesc().findFirst();
     return last?.landingPoint;
+  }
+
+  Future<void> _cleanOrphanUnits(Isar isar) async {
+    final allUnits = await isar.productiveUnits.where().findAll();
+    for (var unit in allUnits) {
+      final count = await isar.landings
+          .filter()
+          .fishermanNameEqualTo(unit.fishermanName)
+          .and()
+          .boatNameEqualTo(unit.boatName)
+          .and()
+          .communityEqualTo(unit.community)
+          .count();
+
+      if (count == 0) {
+        await isar.productiveUnits.delete(unit.id);
+      }
+    }
+  }
+
+  String _generateSearchKey(Landing landing) {
+    final coreParts = [
+      landing.fishermanName,
+      landing.boatName,
+      landing.community
+    ].where((s) => s != null && s.trim().isNotEmpty).toList();
+    final coreKey = coreParts.join(' - ');
+    return '$coreKey - ${landing.category ?? ""} - ${landing.boatType ?? ""}';
+  }
+
+  String _generateSearchKeyFromUnit(ProductiveUnit unit) {
+    final coreParts = [unit.fishermanName, unit.boatName, unit.community]
+        .where((s) => s != null && s.trim().isNotEmpty)
+        .toList();
+    final coreKey = coreParts.join(' - ');
+    return '$coreKey - ${unit.category ?? ""} - ${unit.boatType ?? ""}';
+  }
+
+  bool _compare(String? dbValue, String? newValue) {
+    final d = dbValue?.trim().toLowerCase() ?? '';
+    final n = newValue?.trim().toLowerCase() ?? '';
+    return d == n;
+  }
+
+  bool _hasData(String? value) {
+    return value != null && value.trim().isNotEmpty;
   }
 }

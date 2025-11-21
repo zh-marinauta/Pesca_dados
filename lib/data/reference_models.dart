@@ -10,7 +10,6 @@ class Species {
   String? defaultUnit;
 }
 
-// --- NOVA TABELA ---
 @Collection()
 class FishingGear {
   Id id = Isar.autoIncrement;
@@ -22,15 +21,33 @@ class FishingGear {
 class ProductiveUnit {
   Id id = Isar.autoIncrement;
 
-  @Index(
-      type: IndexType.value, caseSensitive: false) // Indexado para busca rápida
-  late String
-      searchKey; // O texto concatenado: "João - Barco Alpha - Vila Velha"
+  // --- NOVOS CAMPOS OBRIGATÓRIOS PARA SINCRONIZAÇÃO ---
+  @Index(unique: true, replace: true)
+  late String uuid; // Identidade única universal
 
-  // Dados granulares para preencher o formulário automaticamente
+  bool isSynced = false; // Controle de envio para nuvem
+  // ----------------------------------------------------
+
+  @Index(type: IndexType.value, caseSensitive: false)
+  late String searchKey; // "João - Barco Alpha - Vila Velha..."
+
   String? fishermanName;
   String? boatName;
   String? community;
   String? category;
   String? boatType;
+
+  // Helper para converter para o formato do Firebase
+  Map<String, dynamic> toMap() {
+    return {
+      'uuid': uuid,
+      'pescador': fishermanName,
+      'barco': boatName,
+      'comunidade': community,
+      'categoria': category,
+      'tipo_embarcacao': boatType,
+      'search_key': searchKey,
+      'last_updated': DateTime.now().toIso8601String(),
+    };
+  }
 }

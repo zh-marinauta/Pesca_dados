@@ -1403,9 +1403,19 @@ const ProductiveUnitSchema = CollectionSchema(
       name: r'fishermanName',
       type: IsarType.string,
     ),
-    r'searchKey': PropertySchema(
+    r'isSynced': PropertySchema(
       id: 5,
+      name: r'isSynced',
+      type: IsarType.bool,
+    ),
+    r'searchKey': PropertySchema(
+      id: 6,
       name: r'searchKey',
+      type: IsarType.string,
+    ),
+    r'uuid': PropertySchema(
+      id: 7,
+      name: r'uuid',
       type: IsarType.string,
     )
   },
@@ -1415,6 +1425,19 @@ const ProductiveUnitSchema = CollectionSchema(
   deserializeProp: _productiveUnitDeserializeProp,
   idName: r'id',
   indexes: {
+    r'uuid': IndexSchema(
+      id: 2134397340427724972,
+      name: r'uuid',
+      unique: true,
+      replace: true,
+      properties: [
+        IndexPropertySchema(
+          name: r'uuid',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
     r'searchKey': IndexSchema(
       id: -1673253136872295656,
       name: r'searchKey',
@@ -1474,6 +1497,7 @@ int _productiveUnitEstimateSize(
     }
   }
   bytesCount += 3 + object.searchKey.length * 3;
+  bytesCount += 3 + object.uuid.length * 3;
   return bytesCount;
 }
 
@@ -1488,7 +1512,9 @@ void _productiveUnitSerialize(
   writer.writeString(offsets[2], object.category);
   writer.writeString(offsets[3], object.community);
   writer.writeString(offsets[4], object.fishermanName);
-  writer.writeString(offsets[5], object.searchKey);
+  writer.writeBool(offsets[5], object.isSynced);
+  writer.writeString(offsets[6], object.searchKey);
+  writer.writeString(offsets[7], object.uuid);
 }
 
 ProductiveUnit _productiveUnitDeserialize(
@@ -1504,7 +1530,9 @@ ProductiveUnit _productiveUnitDeserialize(
   object.community = reader.readStringOrNull(offsets[3]);
   object.fishermanName = reader.readStringOrNull(offsets[4]);
   object.id = id;
-  object.searchKey = reader.readString(offsets[5]);
+  object.isSynced = reader.readBool(offsets[5]);
+  object.searchKey = reader.readString(offsets[6]);
+  object.uuid = reader.readString(offsets[7]);
   return object;
 }
 
@@ -1526,6 +1554,10 @@ P _productiveUnitDeserializeProp<P>(
     case 4:
       return (reader.readStringOrNull(offset)) as P;
     case 5:
+      return (reader.readBool(offset)) as P;
+    case 6:
+      return (reader.readString(offset)) as P;
+    case 7:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1543,6 +1575,61 @@ List<IsarLinkBase<dynamic>> _productiveUnitGetLinks(ProductiveUnit object) {
 void _productiveUnitAttach(
     IsarCollection<dynamic> col, Id id, ProductiveUnit object) {
   object.id = id;
+}
+
+extension ProductiveUnitByIndex on IsarCollection<ProductiveUnit> {
+  Future<ProductiveUnit?> getByUuid(String uuid) {
+    return getByIndex(r'uuid', [uuid]);
+  }
+
+  ProductiveUnit? getByUuidSync(String uuid) {
+    return getByIndexSync(r'uuid', [uuid]);
+  }
+
+  Future<bool> deleteByUuid(String uuid) {
+    return deleteByIndex(r'uuid', [uuid]);
+  }
+
+  bool deleteByUuidSync(String uuid) {
+    return deleteByIndexSync(r'uuid', [uuid]);
+  }
+
+  Future<List<ProductiveUnit?>> getAllByUuid(List<String> uuidValues) {
+    final values = uuidValues.map((e) => [e]).toList();
+    return getAllByIndex(r'uuid', values);
+  }
+
+  List<ProductiveUnit?> getAllByUuidSync(List<String> uuidValues) {
+    final values = uuidValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'uuid', values);
+  }
+
+  Future<int> deleteAllByUuid(List<String> uuidValues) {
+    final values = uuidValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'uuid', values);
+  }
+
+  int deleteAllByUuidSync(List<String> uuidValues) {
+    final values = uuidValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'uuid', values);
+  }
+
+  Future<Id> putByUuid(ProductiveUnit object) {
+    return putByIndex(r'uuid', object);
+  }
+
+  Id putByUuidSync(ProductiveUnit object, {bool saveLinks = true}) {
+    return putByIndexSync(r'uuid', object, saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByUuid(List<ProductiveUnit> objects) {
+    return putAllByIndex(r'uuid', objects);
+  }
+
+  List<Id> putAllByUuidSync(List<ProductiveUnit> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'uuid', objects, saveLinks: saveLinks);
+  }
 }
 
 extension ProductiveUnitQueryWhereSort
@@ -1630,6 +1717,51 @@ extension ProductiveUnitQueryWhere
         upper: upperId,
         includeUpper: includeUpper,
       ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterWhereClause> uuidEqualTo(
+      String uuid) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'uuid',
+        value: [uuid],
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterWhereClause>
+      uuidNotEqualTo(String uuid) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'uuid',
+              lower: [],
+              upper: [uuid],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'uuid',
+              lower: [uuid],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'uuid',
+              lower: [uuid],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'uuid',
+              lower: [],
+              upper: [uuid],
+              includeUpper: false,
+            ));
+      }
     });
   }
 
@@ -2603,6 +2735,16 @@ extension ProductiveUnitQueryFilter
   }
 
   QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      isSyncedEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isSynced',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
       searchKeyEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -2737,6 +2879,142 @@ extension ProductiveUnitQueryFilter
       ));
     });
   }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'uuid',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'uuid',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'uuid',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'uuid',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'uuid',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'uuid',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'uuid',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'uuid',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'uuid',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterFilterCondition>
+      uuidIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'uuid',
+        value: '',
+      ));
+    });
+  }
 }
 
 extension ProductiveUnitQueryObject
@@ -2813,6 +3091,19 @@ extension ProductiveUnitQuerySortBy
     });
   }
 
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy> sortByIsSynced() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSynced', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy>
+      sortByIsSyncedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSynced', Sort.desc);
+    });
+  }
+
   QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy> sortBySearchKey() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'searchKey', Sort.asc);
@@ -2823,6 +3114,18 @@ extension ProductiveUnitQuerySortBy
       sortBySearchKeyDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'searchKey', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy> sortByUuid() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'uuid', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy> sortByUuidDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'uuid', Sort.desc);
     });
   }
 }
@@ -2907,6 +3210,19 @@ extension ProductiveUnitQuerySortThenBy
     });
   }
 
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy> thenByIsSynced() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSynced', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy>
+      thenByIsSyncedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSynced', Sort.desc);
+    });
+  }
+
   QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy> thenBySearchKey() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'searchKey', Sort.asc);
@@ -2917,6 +3233,18 @@ extension ProductiveUnitQuerySortThenBy
       thenBySearchKeyDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'searchKey', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy> thenByUuid() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'uuid', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QAfterSortBy> thenByUuidDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'uuid', Sort.desc);
     });
   }
 }
@@ -2959,10 +3287,23 @@ extension ProductiveUnitQueryWhereDistinct
     });
   }
 
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QDistinct> distinctByIsSynced() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isSynced');
+    });
+  }
+
   QueryBuilder<ProductiveUnit, ProductiveUnit, QDistinct> distinctBySearchKey(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'searchKey', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, ProductiveUnit, QDistinct> distinctByUuid(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'uuid', caseSensitive: caseSensitive);
     });
   }
 }
@@ -3006,9 +3347,21 @@ extension ProductiveUnitQueryProperty
     });
   }
 
+  QueryBuilder<ProductiveUnit, bool, QQueryOperations> isSyncedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isSynced');
+    });
+  }
+
   QueryBuilder<ProductiveUnit, String, QQueryOperations> searchKeyProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'searchKey');
+    });
+  }
+
+  QueryBuilder<ProductiveUnit, String, QQueryOperations> uuidProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'uuid');
     });
   }
 }
