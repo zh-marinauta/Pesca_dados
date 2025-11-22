@@ -44,90 +44,80 @@ class IsarService {
   }
 
   // --- 1. SALVAR COM INTELIGÊNCIA REFINADA (V1.2) ---
+  // Arquivo: lib/data/isar_service.dart
+
+  // ... (início da classe)
+
   Future<void> saveLandingWithLearning(Landing landing) async {
     final isar = await db;
 
     await isar.writeTxn(() async {
-      // A. Salva a Coleta
+      // 1. Salva a Coleta (Sempre salva)
       await isar.landings.put(landing);
 
-      // B. INTELIGÊNCIA DE UNIDADE PRODUTIVA
-      final pName = landing.fishermanName?.trim();
-      final bName = landing.boatName?.trim();
-      final comm = landing.community?.trim();
+      // 2. Aprende Unidade Produtiva
+      final pName = landing.fishermanName ?? '';
+      final bName = landing.boatName ?? '';
 
-      if ((pName != null && pName.isNotEmpty) ||
-          (bName != null && bName.isNotEmpty)) {
-        ProductiveUnit? targetUnit;
+      // Regra: Se tiver pelo menos um nome válido, aprende
+      bool isValidToLearn =
+          (!pName.contains('Não Identificado') && pName.isNotEmpty) ||
+              (!bName.contains('Não Identificado') && bName.isNotEmpty);
 
-        final candidates = await isar.productiveUnits
-            .filter()
-            .group((q) => q
-                .fishermanNameEqualTo(pName ?? '', caseSensitive: false)
-                .or()
-                .boatNameEqualTo(bName ?? '', caseSensitive: false))
-            .findAll();
+      if (isValidToLearn) {
+        final coreKey = [
+          landing.fishermanName,
+          landing.boatName,
+          landing.community
+        ].where((s) => s != null && s.trim().isNotEmpty).join(' - ');
 
-        // Nível A: MATCH EXATO
-        try {
-          targetUnit = candidates.firstWhere((u) {
-            return _compare(u.fishermanName, pName) &&
-                _compare(u.boatName, bName) &&
-                _compare(u.community, comm);
-          });
-        } catch (e) {
-          targetUnit = null;
-        }
+        if (coreKey.isNotEmpty) {
+          // Tenta achar a unidade no banco
+          final existingUnit = await isar.productiveUnits
+              .filter()
+              .searchKeyStartsWith(coreKey, caseSensitive: false)
+              .findFirst();
 
-        // Nível B: ENRIQUECIMENTO
-        if (targetUnit == null) {
-          for (var candidate in candidates) {
-            bool conflict = false;
-            if (_hasData(candidate.fishermanName) &&
-                _hasData(pName) &&
-                !_compare(candidate.fishermanName, pName)) conflict = true;
-            if (_hasData(candidate.boatName) &&
-                _hasData(bName) &&
-                !_compare(candidate.boatName, bName)) conflict = true;
-            if (_hasData(candidate.community) &&
-                _hasData(comm) &&
-                !_compare(candidate.community, comm)) conflict = true;
+          if (existingUnit == null) {
+            // --- NÃO MUDAR AQUI (CRIA NOVO) ---
+            final newUnit = ProductiveUnit()
+              ..searchKey =
+                  '$coreKey - ${landing.category ?? ""} - ${landing.boatType ?? ""}'
+              ..fishermanName = landing.fishermanName
+              ..boatName = landing.boatName
+              ..community = landing.community
+              ..category = landing.category
+              ..boatType = landing.boatType;
+            await isar.productiveUnits.put(newUnit);
+          } else {
+            // --- OTIMIZAÇÃO AQUI (ATUALIZA EXISTENTE) ---
+            // Substitua o código antigo deste 'else' por este bloco:
 
-            if (!conflict) {
-              targetUnit = candidate;
-              break;
+            // Verifica se houve alguma mudança real nos campos complementares
+            final bool hasChanges = existingUnit.category != landing.category ||
+                existingUnit.boatType != landing.boatType;
+
+            if (hasChanges) {
+              // Só se mudou algo, atualizamos o registro
+              existingUnit.category = landing.category;
+              existingUnit.boatType = landing.boatType;
+              existingUnit.searchKey =
+                  '$coreKey - ${landing.category ?? ""} - ${landing.boatType ?? ""}';
+
+              await isar.productiveUnits.put(existingUnit);
+              print(
+                  "🔄 Unidade Produtiva atualizada: ${existingUnit.searchKey}");
+            } else {
+              // Se for igual, não faz nada (economiza processamento e sync)
+              print("✅ Unidade Produtiva sem alterações. Ignorando update.");
             }
           }
         }
-
-        if (targetUnit == null) {
-          // NOVA UNIDADE
-          final newUnit = ProductiveUnit()
-            ..uuid = const Uuid().v4()
-            ..isSynced = false
-            ..searchKey = _generateSearchKey(landing)
-            ..fishermanName = pName
-            ..boatName = bName
-            ..community = comm
-            ..category = landing.category
-            ..boatType = landing.boatType;
-
-          await isar.productiveUnits.put(newUnit);
-        } else {
-          // ATUALIZAÇÃO
-          targetUnit.fishermanName = targetUnit.fishermanName ?? pName;
-          targetUnit.boatName = targetUnit.boatName ?? bName;
-          targetUnit.community = targetUnit.community ?? comm;
-          targetUnit.category = landing.category ?? targetUnit.category;
-          targetUnit.boatType = landing.boatType ?? targetUnit.boatType;
-          targetUnit.searchKey = _generateSearchKeyFromUnit(targetUnit);
-          targetUnit.isSynced = false;
-          await isar.productiveUnits.put(targetUnit);
-        }
       }
 
-      // C. Aprende Espécies e Artes
+      // 3. Aprende Espécies (Código original continua aqui...)
       for (var catchItem in landing.catches) {
+        // ... (manter o resto do código de espécies igual)
         if (catchItem.speciesName != null &&
             catchItem.speciesName!.isNotEmpty) {
           if (await isar.species
@@ -138,6 +128,7 @@ class IsarService {
             await isar.species.put(Species()..name = catchItem.speciesName!);
           }
         }
+        // ... (manter código de artes de pesca igual)
         if (catchItem.fishingGear != null &&
             catchItem.fishingGear!.isNotEmpty) {
           if (await isar.fishingGears
@@ -151,8 +142,8 @@ class IsarService {
         }
       }
 
-      // D. Faxina
-      //await _cleanOrphanUnits(isar);
+      // 4. Faxina (Código original continua aqui...)
+      await _cleanOrphanUnits(isar);
     });
   }
 
@@ -347,5 +338,13 @@ class IsarService {
 
   bool _hasData(String? value) {
     return value != null && value.trim().isNotEmpty;
+  }
+
+  // Adicione no lib/data/isar_service.dart
+  Future<void> deleteLandings(List<int> ids) async {
+    final isar = await db;
+    await isar.writeTxn(() async {
+      await isar.landings.deleteAll(ids);
+    });
   }
 }
