@@ -1,4 +1,5 @@
 import 'package:isar/isar.dart';
+import 'package:uuid/uuid.dart';
 
 part 'landing_model.g.dart';
 
@@ -6,17 +7,17 @@ part 'landing_model.g.dart';
 class Landing {
   Id id = Isar.autoIncrement;
 
+  // CORREÇÃO: Removemos 'late'. Inicializa direto.
   @Index(unique: true, replace: true)
-  late String uuid;
+  String uuid = const Uuid().v4();
 
   bool isSynced = false;
-  late DateTime date;
+  // CORREÇÃO: Removemos 'late'. Inicializa com data atual.
+  DateTime date = DateTime.now();
 
-  // --- NOVO CAMPO: ENTREPOSTO ---
-  String? landingPoint; // Ex: "Antonina - Praia dos Polacos"
-
-  // --- CABEÇALHO ---
+  String? landingPoint;
   String? fishermanName;
+
   String? boatName;
   String? community;
   String? category;
@@ -31,7 +32,7 @@ class Landing {
       rows.add({
         'uuid_viagem': uuid,
         'data': date.toIso8601String(),
-        'entreposto_monitorado': landingPoint, // <--- VAI PRO FIREBASE
+        'entreposto_monitorado': landingPoint,
         'unidade_produtiva': '$fishermanName - $boatName - $community',
         'pescador': fishermanName,
         'barco': boatName,

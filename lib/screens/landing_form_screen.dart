@@ -151,7 +151,6 @@ class _LandingFormScreenState extends ConsumerState<LandingFormScreen> {
 
       final newLanding = Landing()
         ..id = widget.landingToEdit?.id ?? Isar.autoIncrement
-        ..uuid = widget.landingToEdit?.uuid ?? const Uuid().v4()
         ..date = widget.landingToEdit?.date ?? DateTime.now()
         ..isSynced = false
         ..landingPoint =
@@ -163,6 +162,9 @@ class _LandingFormScreenState extends ConsumerState<LandingFormScreen> {
         ..boatType = _selectedBoatType
         ..catches = _catches
         ..productionSource = _productionSource;
+      if (widget.landingToEdit != null) {
+        newLanding.uuid = widget.landingToEdit!.uuid;
+      }
 
       await ref.read(isarServiceProvider).saveLandingWithLearning(newLanding);
 

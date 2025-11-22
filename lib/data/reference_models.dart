@@ -1,35 +1,43 @@
 import 'package:isar/isar.dart';
+import 'package:uuid/uuid.dart';
 
 part 'reference_models.g.dart';
 
 @Collection()
 class Species {
   Id id = Isar.autoIncrement;
+
+  @Index(unique: true, replace: true)
+  String uuid = const Uuid().v4();
+
   @Index(type: IndexType.value, caseSensitive: false)
-  late String name;
+  String name = '';
+
   String? defaultUnit;
 }
 
 @Collection()
 class FishingGear {
   Id id = Isar.autoIncrement;
+
+  @Index(unique: true, replace: true)
+  String uuid = const Uuid().v4();
+
   @Index(type: IndexType.value, caseSensitive: false)
-  late String name;
+  String name = '';
 }
 
 @Collection()
 class ProductiveUnit {
   Id id = Isar.autoIncrement;
 
-  // --- NOVOS CAMPOS OBRIGATÓRIOS PARA SINCRONIZAÇÃO ---
   @Index(unique: true, replace: true)
-  late String uuid; // Identidade única universal
+  String uuid = const Uuid().v4();
 
-  bool isSynced = false; // Controle de envio para nuvem
-  // ----------------------------------------------------
+  bool isSynced = false;
 
   @Index(type: IndexType.value, caseSensitive: false)
-  late String searchKey; // "João - Barco Alpha - Vila Velha..."
+  String searchKey = '';
 
   String? fishermanName;
   String? boatName;
@@ -37,17 +45,18 @@ class ProductiveUnit {
   String? category;
   String? boatType;
 
-  // Helper para converter para o formato do Firebase
+  // --- CORREÇÃO DO ERRO ---
+  // Método necessário para enviar os dados para o Firebase (SyncService)
   Map<String, dynamic> toMap() {
     return {
       'uuid': uuid,
-      'pescador': fishermanName,
-      'barco': boatName,
-      'comunidade': community,
-      'categoria': category,
-      'tipo_embarcacao': boatType,
-      'search_key': searchKey,
-      'last_updated': DateTime.now().toIso8601String(),
+      'searchKey': searchKey,
+      'fishermanName': fishermanName,
+      'boatName': boatName,
+      'community': community,
+      'category': category,
+      'boatType': boatType,
+      'updatedAt': DateTime.now().toIso8601String(),
     };
   }
 }
