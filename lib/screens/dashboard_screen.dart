@@ -110,39 +110,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _runSync() async {
-    // 1. Bloqueia a tela e avisa que começou
     setState(() => _isSyncing = true);
-
     try {
-      // Cria a instância do serviço
-      final syncService = SyncService(ref.read(isarServiceProvider));
+      // CHAMADA CORRIGIDA: Usa syncAll para enviar tudo de uma vez
+      final results =
+          await SyncService(ref.read(isarServiceProvider)).syncAll();
 
-      // 2. Sincroniza os REGISTROS DE PESCA (Peixes)
-      // Isso garante que o dado principal vá primeiro
-      final landingsCount = await syncService.syncPendingLandings();
-
-      // 3. Sincroniza as UNIDADES PRODUTIVAS (Barcos/Pescadores)
-      // <--- AQUI ESTAVA O PULO DO GATO QUE FALTAVA
-      final unitsCount = await syncService.syncProductiveUnits();
+      final total = results['total'] ?? 0;
 
       if (mounted) {
-        // Mostra o resumo do que aconteceu
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                'Sincronização concluída!\n📦 $landingsCount viagens enviadas.\n⛵ $unitsCount unidades atualizadas.'),
-            backgroundColor: Colors.green));
+            content: Text(total > 0
+                ? 'Sucesso! $total registros enviados.'
+                : 'Tudo atualizado!'),
+            backgroundColor: total > 0 ? Colors.green : Colors.black87));
       }
 
-      // 4. Recarrega os dados da tela para zerar o contador pendente
-      await _loadInitialData();
+      await _loadInitialData(); // Recarrega os contadores
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Erro na sincronização: $e'),
-            backgroundColor: Colors.red));
-      }
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Erro: $e')));
     } finally {
-      // 5. Libera o botão novamente
       if (mounted) setState(() => _isSyncing = false);
     }
   }

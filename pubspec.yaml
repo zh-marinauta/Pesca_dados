@@ -18,7 +18,7 @@ dependencies:
   # Firebase
   firebase_core: ^2.27.0
   firebase_auth: ^4.17.8
-  cloud_firestore: ^4.15.8  # <--- ADICIONAR/VERIFICAR ESTE
+  cloud_firestore: ^4.15.8
   google_sign_in: ^6.2.1
 
   # Estado
@@ -29,7 +29,7 @@ dependencies:
   uuid: ^4.2.1
   intl: ^0.19.0
   gap: ^3.0.0
-  geolocator: ^10.1.0       # <--- ADICIONAR/VERIFICAR ESTE
+  geolocator: ^10.1.0
 
 dev_dependencies:
   flutter_test:
@@ -41,10 +41,19 @@ dev_dependencies:
   isar_generator: ^3.1.0
   riverpod_generator: ^2.3.9
 
+  # --- Gerador de Ícones (NOVO) ---
+  flutter_launcher_icons: ^0.13.1
+
 flutter:
   uses-material-design: true
-
-  # --- Imagens / Logos ---
-  # Crie uma pasta chamada 'assets' na raiz do projeto e coloque suas imagens lá.
   assets:
     - assets/
+
+# --- CONFIGURAÇÃO DO ÍCONE ---
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/logo_pmap.png" 
+  min_sdk_android: 21 # Mantém compatibilidade
+  adaptive_icon_background: "#FFFFFF" # Fundo branco para Androids novos
+  adaptive_icon_foreground: "assets/logo_pmap.png"

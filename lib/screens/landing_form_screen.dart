@@ -482,9 +482,26 @@ class _LandingFormScreenState extends ConsumerState<LandingFormScreen> {
               const Gap(8),
               Row(children: [
                 Expanded(
-                    child: _input(
-                        label: "Pesqueiro",
-                        onChanged: (v) => fish.fishingGround = v)),
+                    child: Autocomplete<String>(
+                        optionsBuilder: (v) async => await ref
+                            .read(isarServiceProvider)
+                            .searchFishingSpot(v.text),
+                        onSelected: (v) => fish.fishingGround = v,
+                        optionsViewBuilder: (context, onSelected, options) =>
+                            _customOptionsViewBuilder(
+                                context, onSelected, options, (opt) => opt),
+                        fieldViewBuilder: (ctx, ctrl, focus, sub) {
+                          if (fish.fishingGround != null && ctrl.text.isEmpty)
+                            ctrl.text = fish.fishingGround!;
+                          return TextFormField(
+                              controller: ctrl,
+                              focusNode: focus,
+                              decoration: const InputDecoration(
+                                  labelText: "Pesqueiro",
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.all(10)),
+                              onChanged: (v) => fish.fishingGround = v);
+                        })),
                 const Gap(5),
                 Expanded(
                     child: DropdownButtonFormField(

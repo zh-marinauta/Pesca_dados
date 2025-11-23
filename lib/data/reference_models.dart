@@ -27,6 +27,30 @@ class FishingGear {
   String name = '';
 }
 
+// Coleção para Pesqueiros
+@Collection()
+class FishingSpot {
+  Id id = Isar.autoIncrement;
+
+  @Index(unique: true, replace: true)
+  String uuid = const Uuid().v4();
+
+  // ADICIONADO: Controle de Sincronização
+  bool isSynced = false;
+
+  @Index(type: IndexType.value, caseSensitive: false)
+  String name = '';
+
+  // ADICIONADO: Conversão para Firebase
+  Map<String, dynamic> toMap() {
+    return {
+      'uuid': uuid,
+      'name': name,
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+  }
+}
+
 @Collection()
 class ProductiveUnit {
   Id id = Isar.autoIncrement;

@@ -16,7 +16,13 @@ class IsarService {
     if (Isar.instanceNames.isEmpty) {
       final dir = await getApplicationDocumentsDirectory();
       final isar = await Isar.open(
-        [LandingSchema, SpeciesSchema, ProductiveUnitSchema, FishingGearSchema],
+        [
+          LandingSchema,
+          SpeciesSchema,
+          ProductiveUnitSchema,
+          FishingGearSchema,
+          FishingSpotSchema
+        ],
         directory: dir.path,
         inspector: true,
       );
@@ -153,6 +159,7 @@ class IsarService {
       }
 
       for (var catchItem in landing.catches) {
+        // Espécies
         if (catchItem.speciesName != null &&
             catchItem.speciesName!.isNotEmpty) {
           if (await isar.species
@@ -163,6 +170,7 @@ class IsarService {
             await isar.species.put(Species()..name = catchItem.speciesName!);
           }
         }
+        // Artes de Pesca
         if (catchItem.fishingGear != null &&
             catchItem.fishingGear!.isNotEmpty) {
           if (await isar.fishingGears
@@ -172,6 +180,19 @@ class IsarService {
               null) {
             await isar.fishingGears
                 .put(FishingGear()..name = catchItem.fishingGear!);
+          }
+        }
+        // NOVO: Pesqueiros (Fishing Spots)
+        if (catchItem.fishingGround != null &&
+            catchItem.fishingGround!.isNotEmpty) {
+          if (await isar.fishingSpots
+                  .filter()
+                  .nameEqualTo(catchItem.fishingGround!, caseSensitive: false)
+                  .findFirst() ==
+              null) {
+            // Cria com isSynced = false (padrão) para ser enviado depois
+            await isar.fishingSpots
+                .put(FishingSpot()..name = catchItem.fishingGround!);
           }
         }
       }
@@ -379,6 +400,22 @@ class IsarService {
       return all.map((e) => e.name).toList();
     }
     return (await isar.fishingGears
+            .filter()
+            .nameContains(query, caseSensitive: false)
+            .findAll())
+        .map((e) => e.name)
+        .toList();
+  }
+
+  // NOVO: Busca de Pesqueiros
+  Future<List<String>> searchFishingSpot(String query) async {
+    final isar = await db;
+    if (query.isEmpty) {
+      final all =
+          await isar.fishingSpots.where().sortByName().limit(50).findAll();
+      return all.map((e) => e.name).toList();
+    }
+    return (await isar.fishingSpots
             .filter()
             .nameContains(query, caseSensitive: false)
             .findAll())
